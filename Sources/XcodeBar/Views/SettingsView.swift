@@ -82,7 +82,7 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "line.3.horizontal.decrease.circle")
                                 .foregroundStyle(.secondary)
-                            TextField("正则匹配（空值不过滤）", text: $folder.projectRegex)
+                            TextField("项目名/路径正则（空值不过滤）", text: $folder.projectRegex)
                                 .disabled(!isEditing)
                             Button {
                                 if isEditing {
@@ -324,7 +324,6 @@ struct ScriptEditorView: View {
 
             Section("执行行为") {
                 Toggle("执行前需要确认", isOn: $script.requiresConfirmation)
-                Toggle("执行后显示结果窗口", isOn: $script.showsExecutionWindow)
             }
 
             Section {

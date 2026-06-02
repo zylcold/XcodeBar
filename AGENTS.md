@@ -53,7 +53,7 @@ Project cache:
 - Keep persistence in `Sources/XcodeBar/Services/PersistenceStore.swift`.
 - Keep shared app state in `Sources/XcodeBar/AppState.swift`.
 - Keep model changes backward-compatible with old JSON settings/cache files by using default values in custom `Codable` initializers.
-- Per-folder filters currently include Pods, Example-like folders, regex matching, and common generated/vendor directories.
+- Per-folder filters currently include Pods, Example-like folders, project name/path regex matching, and common generated/vendor directories.
 - Do not reintroduce `.skipsHiddenFiles` in recursive scanning; hidden worktree folders such as `.worktrees` must be scanned while `.git` remains explicitly ignored.
 - Log levels are `Info`, `Warning`, and `Error`; default UI filter should stay `Warning`.
 - Menu bar settings include a preview panel; keep it in sync with `MenuBarSettings`.

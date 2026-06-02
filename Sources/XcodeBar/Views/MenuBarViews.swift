@@ -28,6 +28,10 @@ struct MenuBarContentView: View {
                     state.refreshMenuBarIfNeeded()
                 }
 
+            if state.enabledScanFolders.count > 1 {
+                folderSwitcher
+            }
+
             if state.settings.menuBar.showScanStatus {
                 scanStatus
             }
@@ -40,7 +44,7 @@ struct MenuBarContentView: View {
                 projectSection(title: "最近项目", projects: recentProjects)
             }
 
-            if state.settings.menuBar.showCurrentGroupSection {
+            if state.selectedMenuScanFolder != nil, state.settings.menuBar.showCurrentGroupSection {
                 projectSection(title: "当前分组", projects: currentGroupProjects)
             }
 
@@ -78,22 +82,6 @@ struct MenuBarContentView: View {
             }
         }
         .padding(14)
-        .confirmationDialog(
-            "执行脚本？",
-            isPresented: Binding(
-                get: { state.pendingScriptRequest != nil },
-                set: { if !$0 { state.pendingScriptRequest = nil } }
-            ),
-            actions: {
-                Button("执行") { state.confirmPendingScript() }
-                Button("取消", role: .cancel) { state.pendingScriptRequest = nil }
-            },
-            message: {
-                if let request = state.pendingScriptRequest {
-                    Text("\(request.script.command)\n目录：\(request.workingDirectory)")
-                }
-            }
-        )
     }
 
     private func openSingletonWindow(id: String, title: String) {
@@ -146,7 +134,7 @@ struct MenuBarContentView: View {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .foregroundStyle(.secondary)
                 }
-                Text(scanFolderNames)
+                Text(selectedFolderName)
                     .font(.headline)
             }
             if let lastRefresh = state.lastRefreshAt {
@@ -157,16 +145,76 @@ struct MenuBarContentView: View {
         }
     }
 
-    private var scanFolderNames: String {
-        let names = state.settings.scanFolders.filter(\.isEnabled).map(\.displayName)
-        return names.isEmpty ? "XcodeBar" : names.joined(separator: " / ")
+    private var selectedFolderName: String {
+        state.selectedMenuScanFolder?.displayName ?? "Overview"
+    }
+
+    private var folderSwitcher: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                folderSwitcherButton(
+                    title: "Overview",
+                    systemImage: "square.grid.2x2",
+                    count: state.projects.count,
+                    isSelected: state.selectedMenuScanFolderID == nil
+                ) {
+                    state.selectedMenuScanFolderID = nil
+                }
+
+                ForEach(state.enabledScanFolders) { folder in
+                    folderSwitcherButton(
+                        title: folder.displayName,
+                        systemImage: "folder",
+                        count: projectCount(in: folder),
+                        isSelected: folder.id == state.selectedMenuScanFolderID
+                    ) {
+                        state.selectedMenuScanFolderID = folder.id
+                    }
+                    .help(folder.path)
+                }
+            }
+        }
+    }
+
+    private func folderSwitcherButton(
+        title: String,
+        systemImage: String,
+        count: Int,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                Text(title)
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(.quaternary, in: Capsule())
+            }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Color.primary.opacity(0.08) : Color.clear)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func projectCount(in folder: ScanFolder) -> Int {
+        state.projects.filter { $0.scanFolderID == folder.id }.count
     }
 
     private var scanStatus: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Image(systemName: state.isScanning ? "arrow.triangle.2.circlepath" : "tray.full")
-                Text(state.isScanning ? state.scanProgress.summary : "\(state.projects.count) 个项目")
+                Text(state.isScanning ? state.scanProgress.summary : "\(state.menuScopedProjects.count) 个项目")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -178,11 +226,11 @@ struct MenuBarContentView: View {
     }
 
     private var favoriteProjects: [ProjectItem] {
-        state.projects.filter { state.settings.favoriteProjectIDs.contains($0.id) }.prefix(5).map { $0 }
+        state.menuScopedProjects.filter { state.settings.favoriteProjectIDs.contains($0.id) }.prefix(5).map { $0 }
     }
 
     private var recentProjects: [ProjectItem] {
-        state.projects
+        state.menuScopedProjects
             .filter { $0.lastOpenedAt != nil }
             .sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }
             .prefix(5)
@@ -191,9 +239,10 @@ struct MenuBarContentView: View {
 
     private var currentGroupProjects: [ProjectItem] {
         guard let group = state.selectedProject?.groupName else {
-            return Array(state.projects.prefix(5))
+            return Array(state.menuScopedProjects.prefix(8))
         }
-        return state.projects.filter { $0.groupName == group }.prefix(8).map { $0 }
+        let grouped = state.menuScopedProjects.filter { $0.groupName == group }
+        return (grouped.isEmpty ? state.menuScopedProjects : grouped).prefix(8).map { $0 }
     }
 
     private func projectSection(title: String, projects: [ProjectItem]) -> some View {

@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -11,6 +12,7 @@ final class AppState: ObservableObject {
     @Published var sortMode: SortMode = .name
     @Published var groupMode: GroupMode = .folder
     @Published var collapsedGroups: Set<String> = []
+    @Published var selectedMenuScanFolderID: ScanFolder.ID?
     @Published var logs: [ScanLogEntry] = []
     @Published var isScanning: Bool = false
     @Published var scanProgress: ScanProgress = ScanProgress()
@@ -29,6 +31,7 @@ final class AppState: ObservableObject {
         self.settings = store.loadSettings()
         self.projects = visibleProjects(from: store.loadProjectsCache())
         self.selectedProjectID = projects.first?.id
+        self.selectedMenuScanFolderID = settings.scanFolders.first(where: \.isEnabled)?.id
         $searchInput
             .removeDuplicates()
             .debounce(for: .milliseconds(220), scheduler: RunLoop.main)
@@ -41,6 +44,28 @@ final class AppState: ObservableObject {
 
     var selectedProject: ProjectItem? {
         projects.first { $0.id == selectedProjectID } ?? projects.first
+    }
+
+    var enabledScanFolders: [ScanFolder] {
+        settings.scanFolders.filter(\.isEnabled)
+    }
+
+    var selectedMenuScanFolder: ScanFolder? {
+        if selectedMenuScanFolderID == nil {
+            return nil
+        }
+        if let selectedMenuScanFolderID,
+           let folder = enabledScanFolders.first(where: { $0.id == selectedMenuScanFolderID }) {
+            return folder
+        }
+        return enabledScanFolders.first
+    }
+
+    var menuScopedProjects: [ProjectItem] {
+        guard let folder = selectedMenuScanFolder else {
+            return projects
+        }
+        return projects.filter { $0.scanFolderID == folder.id }
     }
 
     var menuTitle: String {
@@ -108,12 +133,16 @@ final class AppState: ObservableObject {
     func addScanFolder(path: String) {
         let name = URL(fileURLWithPath: path).lastPathComponent
         settings.scanFolders.append(ScanFolder(displayName: name.isEmpty ? "Projects" : name, path: path, groupName: name))
+        selectedMenuScanFolderID = selectedMenuScanFolderID ?? settings.scanFolders.first(where: \.isEnabled)?.id
         saveSettings()
     }
 
     func removeScanFolder(_ folder: ScanFolder) {
         settings.scanFolders.removeAll { $0.id == folder.id }
         projects.removeAll { $0.scanFolderID == folder.id }
+        if selectedMenuScanFolderID == folder.id {
+            selectedMenuScanFolderID = settings.scanFolders.first(where: \.isEnabled)?.id
+        }
         saveSettings()
         store.saveProjectsCache(projects)
     }
@@ -182,6 +211,7 @@ final class AppState: ObservableObject {
                 self.scanProgress.currentFolderName = nil
                 self.scanProgress.discoveredProjects = self.projects.count
                 self.selectedProjectID = self.selectedProjectID ?? self.projects.first?.id
+                self.ensureValidMenuScanFolderSelection()
                 self.store.saveProjectsCache(self.projects)
             }
         }
@@ -210,6 +240,7 @@ final class AppState: ObservableObject {
                 self.logs.append(contentsOf: finishedLogs)
                 self.isScanning = false
                 self.scanProgress = ScanProgress(totalFolders: 1, completedFolders: 1, currentFolderName: nil, discoveredProjects: self.projects.count)
+                self.ensureValidMenuScanFolderSelection()
                 self.store.saveProjectsCache(self.projects)
             }
         }
@@ -222,12 +253,7 @@ final class AppState: ObservableObject {
 
     func run(script: ScriptAction, project: ProjectItem?) {
         Task.detached { [scriptRunner] in
-            let result = scriptRunner.run(script: script, project: project)
-            await MainActor.run {
-                if script.showsExecutionWindow {
-                    self.lastScriptResult = result
-                }
-            }
+            _ = scriptRunner.run(script: script, project: project)
         }
     }
 
@@ -248,7 +274,10 @@ final class AppState: ObservableObject {
 
     func requestRun(script: ScriptAction, project: ProjectItem?) {
         if script.requiresConfirmation {
-            pendingScriptRequest = PendingScriptRequest(script: script, project: project)
+            let request = PendingScriptRequest(script: script, project: project)
+            DispatchQueue.main.async { [weak self] in
+                self?.presentScriptConfirmation(request)
+            }
         } else {
             run(script: script, project: project)
         }
@@ -258,6 +287,25 @@ final class AppState: ObservableObject {
         guard let request = pendingScriptRequest else { return }
         pendingScriptRequest = nil
         run(script: request.script, project: request.project)
+    }
+
+    private func presentScriptConfirmation(_ request: PendingScriptRequest) {
+        pendingScriptRequest = request
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "执行脚本？"
+        alert.informativeText = "\(request.script.command)\n\n目录：\(request.workingDirectory)"
+        alert.addButton(withTitle: "执行")
+        alert.addButton(withTitle: "取消")
+        alert.window.level = .floating
+
+        let response = alert.runModal()
+        let shouldRun = response == .alertFirstButtonReturn
+        pendingScriptRequest = nil
+        if shouldRun {
+            run(script: request.script, project: request.project)
+        }
     }
 
     func toggleFavorite(project: ProjectItem) {
@@ -290,8 +338,18 @@ final class AppState: ObservableObject {
         if visible != projects {
             projects = visible
             selectedProjectID = projects.first { $0.id == selectedProjectID }?.id ?? projects.first?.id
+            ensureValidMenuScanFolderSelection()
             store.saveProjectsCache(projects)
         }
+    }
+
+    private func ensureValidMenuScanFolderSelection() {
+        guard selectedMenuScanFolderID != nil else { return }
+        if let selectedMenuScanFolderID,
+           enabledScanFolders.contains(where: { $0.id == selectedMenuScanFolderID }) {
+            return
+        }
+        selectedMenuScanFolderID = nil
     }
 
     private func visibleProjects(from source: [ProjectItem]) -> [ProjectItem] {
@@ -314,7 +372,7 @@ final class AppState: ObservableObject {
         guard !pattern.isEmpty, let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return true
         }
-        let text = project.searchIndex
+        let text = project.nameAndPathSearchText
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return regex.firstMatch(in: text, range: range) != nil
     }

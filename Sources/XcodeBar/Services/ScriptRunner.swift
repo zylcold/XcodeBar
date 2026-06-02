@@ -8,23 +8,13 @@ struct ScriptRunner {
             ? script.workingDirectory!
             : (project?.rootPath ?? FileManager.default.homeDirectoryForCurrentUser.path)
 
-        let escapedDir = workingDirectory
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "'", with: "'\\''")
-
-        let escapedCmd = script.command
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-
-        // Open Terminal at the working directory, then type the command (without executing)
+        let shellCommand = "cd \(shellQuoted(workingDirectory)) && \(script.command); exec /bin/zsh -l"
+        let terminalCommand = "/bin/zsh -lic \(shellQuoted(shellCommand))"
+        let escapedCommand = appleScriptEscaped(terminalCommand)
         let appleScript = """
         tell application "Terminal"
             activate
-            do script "cd '\\(escapedDir)'"
-            delay 0.3
-            tell application "System Events"
-                keystroke "\(escapedCmd)"
-            end tell
+            do script "\(escapedCommand)"
         end tell
         """
 
@@ -45,5 +35,15 @@ struct ScriptRunner {
             exitCode: exitCode,
             duration: Date().timeIntervalSince(start)
         )
+    }
+
+    private func shellQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func appleScriptEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 }

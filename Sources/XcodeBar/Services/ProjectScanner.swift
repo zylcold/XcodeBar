@@ -17,7 +17,13 @@ struct ProjectScanner {
         scanDirectory(rootURL, folder: folder, candidates: &candidates, log: log)
         let regex = projectRegex(for: folder, log: log)
 
-        let scannedProjects = candidates.values.map { candidate in
+        let allCandidates = Array(candidates.values)
+        let matchedCandidates = allCandidates.filter { matches(candidate: $0, regex: regex) }
+        if allCandidates.count != matchedCandidates.count {
+            log(.info, "正则预过滤：\(folder.displayName)，候选 \(allCandidates.count) 个，保留 \(matchedCandidates.count) 个")
+        }
+
+        let scannedProjects = matchedCandidates.map { candidate in
             makeProject(from: candidate, folder: folder)
         }
         log(.info, "候选项目：\(folder.displayName)，\(scannedProjects.count) 个")
@@ -25,7 +31,6 @@ struct ProjectScanner {
         let projects = scannedProjects
             .filter { !folder.ignorePods || !$0.isPodsGeneratedProject }
             .filter { !folder.ignoreExamples || !$0.isExampleProject }
-            .filter { matches(project: $0, regex: regex) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         let filteredCount = scannedProjects.count - projects.count
@@ -180,9 +185,9 @@ struct ProjectScanner {
         }
     }
 
-    private func matches(project: ProjectItem, regex: NSRegularExpression?) -> Bool {
+    private func matches(candidate: ProjectCandidate, regex: NSRegularExpression?) -> Bool {
         guard let regex else { return true }
-        let text = project.searchIndex
+        let text = candidate.nameAndPathSearchText
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return regex.firstMatch(in: text, range: range) != nil
     }
@@ -248,5 +253,21 @@ private struct ProjectCandidate {
 
     var hasProjectSignal: Bool {
         workspacePath != nil || xcodeprojPath != nil || packagePath != nil || podfilePath != nil
+    }
+
+    var nameAndPathSearchText: String {
+        [
+            rootPath,
+            workspacePath,
+            xcodeprojPath,
+            packagePath,
+            podfilePath,
+            workspacePath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent },
+            xcodeprojPath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent },
+            URL(fileURLWithPath: rootPath).lastPathComponent
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
     }
 }

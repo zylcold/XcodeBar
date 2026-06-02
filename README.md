@@ -10,7 +10,7 @@ XcodeBar is a macOS menu bar and desktop utility for managing local Apple/Xcode 
 - Scans `.xcworkspace`, `.xcodeproj`, `Package.swift`, and `Podfile`.
 - Prefers `.xcworkspace` over `.xcodeproj` when both exist in one project directory.
 - Ignores `Pods` and Example-like folders by default and exposes per-scan-folder toggles for them.
-- Supports an optional per-scan-folder regular expression filter. Empty regex means no project filtering.
+- Supports an optional per-scan-folder project name/path regular expression filter. Empty regex means no project filtering.
 - Ignores common generated/vendor folders by default, including `DerivedData`, `Carthage`, `.build`, `node_modules`, `vendor`, and `.git`.
 - Detects Git branch, Git worktree metadata, and Xcode schemes.
 - Scans hidden worktree folders such as `.worktrees` while still ignoring `.git`.
@@ -41,7 +41,7 @@ Each scan folder can configure:
 - Ignore `Pods`.
 - Ignore Example-like folders.
 - Ignore common generated/vendor folders.
-- Optional regular expression filter across project name, path, branch, group, worktree, and scheme names.
+- Optional regular expression filter across project name and path. It is applied before Git and scheme metadata parsing for better scan performance.
 
 Use `Info` log level when debugging scan results. It shows scan options, candidate project counts, and filtered project counts.
 

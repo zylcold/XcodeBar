@@ -238,6 +238,20 @@ struct ProjectItem: Identifiable, Codable, Hashable {
         .lowercased()
     }
 
+    var nameAndPathSearchText: String {
+        [
+            name,
+            rootPath,
+            workspacePath,
+            xcodeprojPath,
+            packagePath,
+            podfilePath
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+    }
+
     var isExampleProject: Bool {
         let paths = [rootPath, workspacePath, xcodeprojPath, packagePath, podfilePath].compactMap { $0 }
         return paths.contains { path in

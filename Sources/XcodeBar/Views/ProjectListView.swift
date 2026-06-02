@@ -9,25 +9,6 @@ struct ProjectListView: View {
         } detail: {
             content
         }
-        .sheet(item: $state.lastScriptResult) { result in
-            ScriptResultView(result: result)
-        }
-        .confirmationDialog(
-            "执行脚本？",
-            isPresented: Binding(
-                get: { state.pendingScriptRequest != nil },
-                set: { if !$0 { state.pendingScriptRequest = nil } }
-            ),
-            actions: {
-                Button("执行") { state.confirmPendingScript() }
-                Button("取消", role: .cancel) { state.pendingScriptRequest = nil }
-            },
-            message: {
-                if let request = state.pendingScriptRequest {
-                    Text("\(request.script.command)\n目录：\(request.workingDirectory)")
-                }
-            }
-        )
     }
 
     private var sidebar: some View {
