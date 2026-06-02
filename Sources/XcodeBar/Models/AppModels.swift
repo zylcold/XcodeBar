@@ -321,10 +321,11 @@ struct AppSettings: Codable, Hashable {
     var scripts: [ScriptAction] = ScriptAction.presets
     var menuBar: MenuBarSettings = MenuBarSettings()
     var favoriteProjectIDs: Set<String> = []
+    var logLevel: ScanLogEntry.Level = .warning
 }
 
 struct ScanLogEntry: Identifiable, Hashable {
-    enum Level: String, CaseIterable, Identifiable {
+    enum Level: String, CaseIterable, Identifiable, Codable {
         case info = "Info"
         case warning = "Warning"
         case error = "Error"

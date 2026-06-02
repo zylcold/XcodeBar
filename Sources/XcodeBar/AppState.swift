@@ -149,6 +149,7 @@ final class AppState: ObservableObject {
         if folders.isEmpty {
             logs = [ScanLogEntry(level: .warning, message: "没有启用的扫描文件夹")]
         }
+        let totalStart = Date()
         Task.detached { [scanner] in
             var allProjects: [ProjectItem] = []
             var logEntries: [ScanLogEntry] = []
@@ -156,9 +157,12 @@ final class AppState: ObservableObject {
                 await MainActor.run {
                     self.scanProgress.currentFolderName = folder.displayName
                 }
+                let folderStart = Date()
                 let scanned = scanner.scan(folder: folder) { level, message in
                     logEntries.append(ScanLogEntry(level: level, message: message))
                 }
+                let folderDuration = Date().timeIntervalSince(folderStart)
+                logEntries.append(ScanLogEntry(level: .info, message: "扫描耗时：\(folder.displayName)，\(String(format: "%.2f", folderDuration))秒，发现 \(scanned.count) 个项目"))
                 allProjects.append(contentsOf: scanned)
                 let discoveredCount = allProjects.count
                 await MainActor.run {
@@ -166,6 +170,8 @@ final class AppState: ObservableObject {
                     self.scanProgress.discoveredProjects = discoveredCount
                 }
             }
+            let totalDuration = Date().timeIntervalSince(totalStart)
+            logEntries.append(ScanLogEntry(level: .info, message: "全部扫描完成，总耗时 \(String(format: "%.2f", totalDuration))秒，共 \(allProjects.count) 个项目"))
             let finishedProjects = allProjects
             let finishedLogs = logEntries
             await MainActor.run {
@@ -190,9 +196,12 @@ final class AppState: ObservableObject {
         scanProgress = ScanProgress(totalFolders: 1, completedFolders: 0, currentFolderName: folder.displayName, discoveredProjects: projects.count)
         Task.detached { [scanner] in
             var logEntries: [ScanLogEntry] = []
+            let folderStart = Date()
             let scanned = scanner.scan(folder: folder) { level, message in
                 logEntries.append(ScanLogEntry(level: level, message: message))
             }
+            let duration = Date().timeIntervalSince(folderStart)
+            logEntries.append(ScanLogEntry(level: .info, message: "扫描耗时：\(folder.displayName)，\(String(format: "%.2f", duration))秒，发现 \(scanned.count) 个项目"))
             let finishedLogs = logEntries
             await MainActor.run {
                 self.projects.removeAll { $0.scanFolderID == folder.id }

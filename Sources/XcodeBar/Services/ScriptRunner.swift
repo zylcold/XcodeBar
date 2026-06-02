@@ -8,15 +8,23 @@ struct ScriptRunner {
             ? script.workingDirectory!
             : (project?.rootPath ?? FileManager.default.homeDirectoryForCurrentUser.path)
 
-        let escapedDir = workingDirectory.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        let escapedCmd = script.command.replacingOccurrences(of: "\\", with: "\\\\")
+        let escapedDir = workingDirectory
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "'\\''")
+
+        let escapedCmd = script.command
+            .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
 
+        // Open Terminal at the working directory, then type the command (without executing)
         let appleScript = """
         tell application "Terminal"
             activate
-            do script "cd \\\"\(escapedDir)\" && \(escapedCmd)"
+            do script "cd '\\(escapedDir)'"
+            delay 0.3
+            tell application "System Events"
+                keystroke "\(escapedCmd)"
+            end tell
         end tell
         """
 

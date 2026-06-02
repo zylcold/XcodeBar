@@ -221,12 +221,6 @@ struct MenuBarContentView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
 
-                        if let scheme = project.primarySchemeName {
-                            Label(scheme, systemImage: "shippingbox")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
                         if state.settings.menuBar.showQuickScriptsSection {
                             Menu {
                                 ForEach(state.scripts(for: project)) { script in

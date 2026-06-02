@@ -6,7 +6,6 @@ struct SettingsView: View {
     @State private var isImportingFolder = false
     @State private var selectedScriptID: UUID?
     @State private var editingScanFolderIDs: Set<UUID> = []
-    @State private var logLevel: ScanLogEntry.Level = .warning
 
     var body: some View {
         TabView {
@@ -238,12 +237,13 @@ struct SettingsView: View {
     private var logsTab: some View {
         VStack(alignment: .leading) {
             HStack {
-                Picker("等级", selection: $logLevel) {
+                Picker("等级", selection: $state.settings.logLevel) {
                     ForEach(ScanLogEntry.Level.allCases) { level in
                         Text(level.rawValue).tag(level)
                     }
                 }
                 .frame(width: 150)
+                .onChange(of: state.settings.logLevel) { _ in state.saveSettings() }
                 Button {
                     state.refreshAll()
                 } label: {
@@ -258,7 +258,7 @@ struct SettingsView: View {
                 .help("清空日志")
                 Spacer()
             }
-            Text(logLevel == .info ? "Info 会显示扫描选项、候选项目数和过滤数量。" : "默认显示 Warning 和 Error。")
+            Text(state.settings.logLevel == .info ? "Info 会显示扫描选项、候选项目数和过滤数量。" : "默认显示 Warning 和 Error。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             List(filteredLogs) { entry in
@@ -278,7 +278,7 @@ struct SettingsView: View {
 
     private var filteredLogs: [ScanLogEntry] {
         state.logs.filter { entry in
-            switch logLevel {
+            switch state.settings.logLevel {
             case .info:
                 return true
             case .warning:
