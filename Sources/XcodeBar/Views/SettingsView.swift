@@ -133,6 +133,17 @@ struct SettingsView: View {
                 Toggle("下拉菜单项目行：显示脚本菜单", isOn: $state.settings.menuBar.showQuickScriptsSection)
                 Toggle("下拉菜单：刷新入口", isOn: $state.settings.menuBar.showRefreshSection)
                 Toggle("下拉菜单：控制面板入口", isOn: $state.settings.menuBar.showControlPanelSection)
+                Divider()
+                Picker("自动刷新间隔", selection: Binding(
+                    get: { state.settings.menuBar.autoRefreshInterval },
+                    set: { state.settings.menuBar.autoRefreshInterval = $0; state.restartAutoRefreshTimer() }
+                )) {
+                    Text("关闭").tag(TimeInterval(0))
+                    Text("1 分钟").tag(TimeInterval(60))
+                    Text("2 分钟").tag(TimeInterval(120))
+                    Text("5 分钟").tag(TimeInterval(300))
+                    Text("10 分钟").tag(TimeInterval(600))
+                }
             }
             .frame(minWidth: 320, maxWidth: 420)
 

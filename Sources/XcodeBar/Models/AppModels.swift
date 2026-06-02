@@ -312,6 +312,7 @@ struct MenuBarSettings: Codable, Hashable {
     var showQuickScriptsSection: Bool = true
     var showRefreshSection: Bool = true
     var showControlPanelSection: Bool = true
+    var autoRefreshInterval: TimeInterval = 120
 }
 
 struct AppSettings: Codable, Hashable {

@@ -10,7 +10,7 @@ struct XcodeBarApp: App {
                 .environmentObject(state)
                 .frame(width: 380)
         } label: {
-            MenuBarLabelView(title: state.menuTitle, showIcon: state.settings.menuBar.showIcon)
+            MenuBarLabelView(title: state.menuTitle, showIcon: state.settings.menuBar.showIcon, isScanning: state.isScanning)
         }
         .menuBarExtraStyle(.window)
 

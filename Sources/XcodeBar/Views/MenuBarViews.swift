@@ -4,12 +4,13 @@ import SwiftUI
 struct MenuBarLabelView: View {
     let title: String
     let showIcon: Bool
+    let isScanning: Bool
 
     var body: some View {
         if showIcon && !title.isEmpty {
-            Label(title, systemImage: "hammer")
+            Label(title, systemImage: isScanning ? "arrow.triangle.2.circlepath" : "hammer")
         } else if showIcon {
-            Image(systemName: "hammer")
+            Image(systemName: isScanning ? "arrow.triangle.2.circlepath" : "hammer")
         } else {
             Text(title.isEmpty ? "XcodeBar" : title)
         }
@@ -68,6 +69,12 @@ struct MenuBarContentView: View {
                     }
                     .help("设置")
                 }
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Image(systemName: "power")
+                }
+                .help("退出 XcodeBar")
             }
         }
         .padding(14)
@@ -90,29 +97,57 @@ struct MenuBarContentView: View {
     }
 
     private func openSingletonWindow(id: String, title: String) {
+        NSApp.setActivationPolicy(.regular)
+        NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
         openWindow(id: id)
-        focusWindow(title: title, after: 0.05)
-        focusWindow(title: title, after: 0.25)
-        focusWindow(title: title, after: 0.5)
+        scheduleFocus(title: title)
+        observeWindowClose()
     }
 
-    private func focusWindow(title: String, after delay: TimeInterval) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            NSApp.activate(ignoringOtherApps: true)
-            guard let window = NSApp.windows.first(where: { $0.title == title }) else { return }
+    private func scheduleFocus(title: String) {
+        var attempts = 0
+        let maxAttempts = 10
+        func tryFocus() {
+            attempts += 1
+            guard let window = NSApp.windows.first(where: { $0.title == title }) else {
+                if attempts < maxAttempts {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: tryFocus)
+                }
+                return
+            }
+            NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
             window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
+            window.makeKey()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: tryFocus)
+    }
+
+    private func observeWindowClose() {
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                let visibleWindows = NSApp.windows.filter {
+                    $0.isVisible && $0.title != "" && $0.className.contains("SwiftUI")
+                }
+                if visibleWindows.isEmpty {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+            }
         }
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(state.selectedProject?.name ?? "XcodeBar")
-                .font(.headline)
-            if let project = state.selectedProject {
-                Text([project.gitBranch, project.worktreeName].compactMap { $0 }.joined(separator: " / "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                if state.isScanning {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(.secondary)
+                }
+                Text(scanFolderNames)
+                    .font(.headline)
             }
             if let lastRefresh = state.lastRefreshAt {
                 Text("上次刷新：\(lastRefresh, style: .relative)前")
@@ -120,6 +155,11 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    private var scanFolderNames: String {
+        let names = state.settings.scanFolders.filter(\.isEnabled).map(\.displayName)
+        return names.isEmpty ? "XcodeBar" : names.joined(separator: " / ")
     }
 
     private var scanStatus: some View {

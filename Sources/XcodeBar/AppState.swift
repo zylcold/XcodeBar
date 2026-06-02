@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     private let scriptRunner = ScriptRunner()
     private var cancellables: Set<AnyCancellable> = []
     private var lastMenuBarRefreshAt: Date = .distantPast
+    private var autoRefreshTimer: Timer?
 
     init() {
         self.settings = store.loadSettings()
@@ -35,6 +36,7 @@ final class AppState: ObservableObject {
                 self?.searchText = value
             }
             .store(in: &cancellables)
+        startAutoRefreshTimer()
     }
 
     var selectedProject: ProjectItem? {
@@ -117,9 +119,26 @@ final class AppState: ObservableObject {
     }
 
     func refreshMenuBarIfNeeded() {
-        guard Date().timeIntervalSince(lastMenuBarRefreshAt) >= 120 else { return }
+        let interval = settings.menuBar.autoRefreshInterval
+        guard interval > 0 else { return }
+        guard Date().timeIntervalSince(lastMenuBarRefreshAt) >= interval else { return }
         lastMenuBarRefreshAt = Date()
         refreshAll()
+    }
+
+    func restartAutoRefreshTimer() {
+        startAutoRefreshTimer()
+    }
+
+    private func startAutoRefreshTimer() {
+        autoRefreshTimer?.invalidate()
+        let interval = settings.menuBar.autoRefreshInterval
+        guard interval > 0 else { return }
+        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshAll()
+            }
+        }
     }
 
     func refreshAll() {

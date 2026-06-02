@@ -18,17 +18,19 @@ private final class FocusHostingView: NSView {
     }
 
     func scheduleFocus() {
-        focus(after: 0.02)
-        focus(after: 0.15)
-        focus(after: 0.35)
-    }
-
-    private func focus(after delay: TimeInterval) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let window = self?.window else { return }
-            NSApp.activate(ignoringOtherApps: true)
+        var attempts = 0
+        func tryFocus() {
+            attempts += 1
+            guard let window = self.window else {
+                if attempts < 10 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: tryFocus)
+                }
+                return
+            }
+            NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
             window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
+            window.makeKey()
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: tryFocus)
     }
 }
