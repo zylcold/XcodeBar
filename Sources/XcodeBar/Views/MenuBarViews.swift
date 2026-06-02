@@ -23,6 +23,9 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+                .task {
+                    state.refreshMenuBarIfNeeded()
+                }
 
             if state.settings.menuBar.showScanStatus {
                 scanStatus
@@ -110,6 +113,11 @@ struct MenuBarContentView: View {
                 Text([project.gitBranch, project.worktreeName].compactMap { $0 }.joined(separator: " / "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if let lastRefresh = state.lastRefreshAt {
+                Text("上次刷新：\(lastRefresh, style: .relative)前")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
     }

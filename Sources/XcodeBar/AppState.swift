@@ -16,11 +16,13 @@ final class AppState: ObservableObject {
     @Published var scanProgress: ScanProgress = ScanProgress()
     @Published var lastScriptResult: ScriptResult?
     @Published var pendingScriptRequest: PendingScriptRequest?
+    @Published var lastRefreshAt: Date?
 
     private let store = PersistenceStore()
     private let scanner = ProjectScanner()
     private let scriptRunner = ScriptRunner()
     private var cancellables: Set<AnyCancellable> = []
+    private var lastMenuBarRefreshAt: Date = .distantPast
 
     init() {
         self.settings = store.loadSettings()
@@ -114,6 +116,12 @@ final class AppState: ObservableObject {
         store.saveProjectsCache(projects)
     }
 
+    func refreshMenuBarIfNeeded() {
+        guard Date().timeIntervalSince(lastMenuBarRefreshAt) >= 120 else { return }
+        lastMenuBarRefreshAt = Date()
+        refreshAll()
+    }
+
     func refreshAll() {
         isScanning = true
         logs.removeAll()
@@ -145,6 +153,7 @@ final class AppState: ObservableObject {
                 self.projects = self.visibleProjects(from: self.mergeLastOpened(scanned: finishedProjects))
                 self.logs = finishedLogs
                 self.isScanning = false
+                self.lastRefreshAt = Date()
                 self.scanProgress.currentFolderName = nil
                 self.scanProgress.discoveredProjects = self.projects.count
                 self.selectedProjectID = self.selectedProjectID ?? self.projects.first?.id
