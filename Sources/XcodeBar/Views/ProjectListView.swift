@@ -196,6 +196,13 @@ struct ProjectRowView: View {
                             .padding(.vertical, 2)
                             .background(.orange.opacity(0.18), in: Capsule())
                     }
+                    if project.hasXcodeGen {
+                        Text("XcodeGen")
+                            .font(.caption)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.purple.opacity(0.16), in: Capsule())
+                    }
                     if project.isWorktree {
                         Text(project.worktreeName ?? "Worktree")
                             .font(.caption)

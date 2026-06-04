@@ -150,6 +150,8 @@ struct ProjectScanner {
             candidate.packagePath = url.path
         } else if name == "Podfile" {
             candidate.podfilePath = url.path
+        } else if name == "project.yml" {
+            candidate.xcodegenPath = url.path
         }
 
         if candidate.hasProjectSignal {
@@ -182,6 +184,7 @@ struct ProjectScanner {
             packagePath: candidate.packagePath,
             podfilePath: candidate.podfilePath,
             hasPods: candidate.podfilePath != nil,
+            hasXcodeGen: candidate.xcodegenPath != nil,
             schemes: schemeNames(for: candidate),
             gitBranch: gitInfo.branch,
             gitRootPath: gitInfo.root,
@@ -266,19 +269,84 @@ struct ProjectScanner {
     }
 
     private func gitMetadata(at path: String, detectWorktree: Bool) -> (branch: String?, root: String?, isWorktree: Bool, worktreeName: String?, mainPath: String?) {
-        let root = Shell.run("git rev-parse --show-toplevel", in: path).stdout
-        guard !root.isEmpty else { return (nil, nil, false, nil, nil) }
-        let branchOutput = Shell.run("git branch --show-current", in: path).stdout
-        let branch: String = branchOutput.isEmpty ? Shell.run("git rev-parse --short HEAD", in: path).stdout : branchOutput
-
-        guard detectWorktree else { return (branch, root, false, nil, nil) }
-        let commonDir = Shell.run("git rev-parse --git-common-dir", in: path).stdout
-        let gitDir = Shell.run("git rev-parse --git-dir", in: path).stdout
-        let isWorktree = !commonDir.isEmpty && !gitDir.isEmpty && commonDir != gitDir
-        let worktreeName = isWorktree ? URL(fileURLWithPath: root).lastPathComponent : nil
-        let mainPath: String? = isWorktree ? Shell.run("git worktree list --porcelain | awk '/^worktree / {print $2; exit}'", in: path).stdout : nil
-        return (branch.isEmpty ? nil : branch, root, isWorktree, worktreeName, mainPath?.isEmpty == false ? mainPath : nil)
+        guard let repository = gitRepository(containing: URL(fileURLWithPath: path).standardizedFileURL) else {
+            return (nil, nil, false, nil, nil)
+        }
+        let branch = gitBranchName(gitDirectory: repository.gitDirectory)
+        let isWorktree = detectWorktree && repository.isWorktree
+        let worktreeName = isWorktree ? repository.root.lastPathComponent : nil
+        let mainPath = isWorktree ? mainRepositoryPath(for: repository.gitDirectory) : nil
+        return (branch, repository.root.path, isWorktree, worktreeName, mainPath)
     }
+
+    private func gitRepository(containing url: URL) -> GitRepository? {
+        var current = url
+        let fileManager = FileManager.default
+        while true {
+            let dotGit = current.appendingPathComponent(".git")
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: dotGit.path, isDirectory: &isDirectory) {
+                if isDirectory.boolValue {
+                    return GitRepository(root: current, gitDirectory: dotGit, isWorktree: false)
+                }
+                if let gitDirectory = gitDirectory(fromFileAt: dotGit, repositoryRoot: current) {
+                    return GitRepository(root: current, gitDirectory: gitDirectory, isWorktree: true)
+                }
+            }
+
+            let parent = current.deletingLastPathComponent()
+            if parent.path == current.path {
+                return nil
+            }
+            current = parent
+        }
+    }
+
+    private func gitDirectory(fromFileAt dotGit: URL, repositoryRoot: URL) -> URL? {
+        guard let content = try? String(contentsOf: dotGit, encoding: .utf8) else {
+            return nil
+        }
+        let prefix = "gitdir:"
+        guard content.lowercased().hasPrefix(prefix) else {
+            return nil
+        }
+        let rawPath = String(content.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawPath.isEmpty else {
+            return nil
+        }
+        if rawPath.hasPrefix("/") {
+            return URL(fileURLWithPath: rawPath).standardizedFileURL
+        }
+        return repositoryRoot.appendingPathComponent(rawPath).standardizedFileURL
+    }
+
+    private func gitBranchName(gitDirectory: URL) -> String? {
+        let headURL = gitDirectory.appendingPathComponent("HEAD")
+        guard let head = try? String(contentsOf: headURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+              !head.isEmpty else {
+            return nil
+        }
+        let refPrefix = "ref: refs/heads/"
+        if head.hasPrefix(refPrefix) {
+            return String(head.dropFirst(refPrefix.count))
+        }
+        return String(head.prefix(12))
+    }
+
+    private func mainRepositoryPath(for gitDirectory: URL) -> String? {
+        let components = gitDirectory.standardizedFileURL.pathComponents
+        guard let gitIndex = components.lastIndex(of: ".git"), gitIndex > 0 else {
+            return nil
+        }
+        let path = NSString.path(withComponents: Array(components.prefix(gitIndex)))
+        return path.isEmpty ? nil : path
+    }
+}
+
+private struct GitRepository {
+    var root: URL
+    var gitDirectory: URL
+    var isWorktree: Bool
 }
 
 private struct ProjectCandidate {
@@ -287,6 +355,7 @@ private struct ProjectCandidate {
     var xcodeprojPath: String?
     var packagePath: String?
     var podfilePath: String?
+    var xcodegenPath: String?
 
     var hasProjectSignal: Bool {
         workspacePath != nil || xcodeprojPath != nil || packagePath != nil || podfilePath != nil
@@ -299,6 +368,7 @@ private struct ProjectCandidate {
             xcodeprojPath,
             packagePath,
             podfilePath,
+            xcodegenPath,
             workspacePath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent },
             xcodeprojPath.map { URL(fileURLWithPath: $0).deletingPathExtension().lastPathComponent },
             URL(fileURLWithPath: rootPath).lastPathComponent

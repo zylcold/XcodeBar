@@ -69,23 +69,15 @@ final class AppState: ObservableObject {
     }
 
     var menuTitle: String {
-        let project = selectedProject
-        switch settings.menuBar.displayMode {
-        case .iconOnly:
-            return ""
-        case .iconAndProject:
-            return project?.name ?? "XcodeBar"
-        case .iconAndBranch:
-            return project?.gitBranch ?? "XcodeBar"
-        case .iconAndWorktree:
-            return project?.worktreeName ?? "XcodeBar"
-        case .custom:
-            var parts: [String] = []
-            if settings.menuBar.showCurrentProjectName, let name = project?.name { parts.append(name) }
-            if settings.menuBar.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
-            if settings.menuBar.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
-            return parts.isEmpty ? "XcodeBar" : parts.joined(separator: " / ")
-        }
+        "XcodeBar"
+    }
+
+    func panelTitleParts(for project: ProjectItem?) -> [String] {
+        var parts: [String] = []
+        if settings.menuBar.showCurrentProjectName, let name = project?.name { parts.append(name) }
+        if settings.menuBar.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
+        if settings.menuBar.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
+        return parts
     }
 
     var filteredProjects: [ProjectItem] {
@@ -123,6 +115,14 @@ final class AppState: ObservableObject {
             }
         }
         return grouped.keys.sorted().map { ($0, grouped[$0] ?? []) }
+    }
+
+    func updateMenuBarSettings(_ update: (inout MenuBarSettings) -> Void) {
+        var nextSettings = settings
+        update(&nextSettings.menuBar)
+        settings = nextSettings
+        saveSettings()
+        restartAutoRefreshTimer()
     }
 
     func saveSettings() {

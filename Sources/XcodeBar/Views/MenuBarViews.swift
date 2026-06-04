@@ -128,14 +128,31 @@ struct MenuBarContentView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if state.isScanning {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .foregroundStyle(.secondary)
                 }
                 Text(selectedFolderName)
                     .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+                if state.settings.menuBar.showCurrentBranchName,
+                   let selectedProject = state.selectedProject,
+                   let branch = selectedProject.gitBranch {
+                    Label(branch, systemImage: "arrow.triangle.branch")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(branch)
+                }
+            }
+            if !currentProjectTitle.isEmpty {
+                Text(currentProjectTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
             if let lastRefresh = state.lastRefreshAt {
                 Text("上次刷新：\(lastRefresh, style: .relative)前")
@@ -147,6 +164,10 @@ struct MenuBarContentView: View {
 
     private var selectedFolderName: String {
         state.selectedMenuScanFolder?.displayName ?? "Overview"
+    }
+
+    private var currentProjectTitle: String {
+        state.panelTitleParts(for: state.selectedProject).joined(separator: " / ")
     }
 
     private var folderSwitcher: some View {
@@ -246,7 +267,7 @@ struct MenuBarContentView: View {
     }
 
     private func projectSection(title: String, projects: [ProjectItem]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -256,37 +277,66 @@ struct MenuBarContentView: View {
                     .foregroundStyle(.tertiary)
             } else {
                 ForEach(projects) { project in
-                    HStack(spacing: 8) {
-                        Button {
-                            state.open(project: project)
-                        } label: {
-                            Text(project.name)
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        Text(project.gitBranch ?? "-")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-
-                        if state.settings.menuBar.showQuickScriptsSection {
-                            Menu {
-                                ForEach(state.scripts(for: project)) { script in
-                                    Button(script.name) {
-                                        state.requestRun(script: script, project: project)
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "terminal")
-                            }
-                            .menuStyle(.borderlessButton)
-                            .fixedSize()
-                            .help("脚本")
-                        }
-                    }
+                    projectRow(project)
                 }
             }
         }
+    }
+
+    private func projectRow(_ project: ProjectItem) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Button {
+                state.open(project: project)
+            } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    if state.settings.menuBar.showCurrentProjectName {
+                        Text(project.name)
+                            .font(.body.weight(.semibold))
+                            .lineLimit(1)
+                    }
+                    HStack(spacing: 10) {
+                        if state.settings.menuBar.showCurrentBranchName {
+                            Label(project.gitBranch ?? "-", systemImage: "arrow.triangle.branch")
+                                .lineLimit(1)
+                                .help(project.gitBranch ?? "无分支信息")
+                        }
+                        if state.settings.menuBar.showCurrentWorktreeName, let worktree = project.worktreeName {
+                            Label(worktree, systemImage: "point.3.connected.trianglepath.dotted")
+                                .lineLimit(1)
+                                .help(worktree)
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    if !state.settings.menuBar.showCurrentProjectName,
+                       !state.settings.menuBar.showCurrentBranchName,
+                       !state.settings.menuBar.showCurrentWorktreeName {
+                        Text(project.name)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if state.settings.menuBar.showQuickScriptsSection {
+                Menu {
+                    ForEach(state.scripts(for: project)) { script in
+                        Button(script.name) {
+                            state.requestRun(script: script, project: project)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "terminal")
+                        .frame(width: 24, height: 24)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("脚本")
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

@@ -3,20 +3,10 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var state: AppState
+    @State private var isImportingFolder = false
     @State private var folderImportMode: FolderImportMode?
     @State private var selectedScriptID: UUID?
     @State private var editingScanFolderIDs: Set<UUID> = []
-
-    private var isImportingFolder: Binding<Bool> {
-        Binding(
-            get: { folderImportMode != nil },
-            set: { isPresented in
-                if !isPresented {
-                    folderImportMode = nil
-                }
-            }
-        )
-    }
 
     var body: some View {
         TabView {
@@ -30,7 +20,7 @@ struct SettingsView: View {
                 .tabItem { Label("日志", systemImage: "list.bullet.rectangle") }
         }
         .padding()
-        .fileImporter(isPresented: isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: $isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
             let mode = folderImportMode
             folderImportMode = nil
             if case .success(let urls) = result, let url = urls.first {
@@ -43,6 +33,8 @@ struct SettingsView: View {
                     break
                 }
                 state.refreshAll()
+            } else if case .failure(let error) = result {
+                state.logs.append(ScanLogEntry(level: .error, message: "选择扫描文件夹失败：\(error.localizedDescription)"))
             }
         }
     }
@@ -51,7 +43,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button {
-                    folderImportMode = .add
+                    beginFolderImport(.add)
                 } label: {
                     Label("添加", systemImage: "folder.badge.plus")
                 }
@@ -88,7 +80,7 @@ struct SettingsView: View {
                             }
                             .help("刷新")
                             Button {
-                                folderImportMode = .authorize(folder.id)
+                                beginFolderImport(.authorize(folder.id))
                             } label: {
                                 Image(systemName: folder.securityScopedBookmarkData == nil ? "lock.open" : "lock")
                             }
@@ -135,47 +127,88 @@ struct SettingsView: View {
         }
     }
 
+    private func beginFolderImport(_ mode: FolderImportMode) {
+        folderImportMode = mode
+        isImportingFolder = true
+    }
+
     private var menuBarTab: some View {
-        HStack(alignment: .top, spacing: 24) {
-            Form {
-                Picker("展示模式", selection: $state.settings.menuBar.displayMode) {
-                    ForEach(MenuBarSettings.DisplayMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+        HStack(alignment: .top, spacing: 64) {
+            VStack(alignment: .leading, spacing: 18) {
+                settingsGroup("菜单栏") {
+                    Toggle("显示 App 图标", isOn: menuBarToggle(\.showIcon))
+                }
+
+                settingsGroup("面板显示") {
+                    Toggle("显示项目名", isOn: menuBarToggle(\.showCurrentProjectName))
+                    Toggle("显示分支名", isOn: menuBarToggle(\.showCurrentBranchName))
+                    Toggle("显示 Worktree 名称", isOn: menuBarToggle(\.showCurrentWorktreeName))
+                }
+
+                settingsGroup("下拉面板") {
+                    Toggle("显示扫描状态", isOn: menuBarToggle(\.showScanStatus))
+                    Toggle("显示收藏项目", isOn: menuBarToggle(\.showFavoritesSection))
+                    Toggle("显示最近项目", isOn: menuBarToggle(\.showRecentSection))
+                    Toggle("显示当前分组项目", isOn: menuBarToggle(\.showCurrentGroupSection))
+                    Toggle("项目行显示脚本菜单", isOn: menuBarToggle(\.showQuickScriptsSection))
+                    Toggle("显示刷新入口", isOn: menuBarToggle(\.showRefreshSection))
+                    Toggle("显示控制面板入口", isOn: menuBarToggle(\.showControlPanelSection))
+                }
+
+                settingsGroup("刷新") {
+                    HStack(spacing: 10) {
+                        Text("自动刷新间隔")
+                        Picker("", selection: Binding(
+                            get: { state.settings.menuBar.autoRefreshInterval },
+                            set: { newValue in
+                                state.updateMenuBarSettings { $0.autoRefreshInterval = newValue }
+                            }
+                        )) {
+                            Text("关闭").tag(TimeInterval(0))
+                            Text("1 分钟").tag(TimeInterval(60))
+                            Text("2 分钟").tag(TimeInterval(120))
+                            Text("5 分钟").tag(TimeInterval(300))
+                            Text("10 分钟").tag(TimeInterval(600))
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 150, alignment: .leading)
                     }
                 }
-                Toggle("显示 App 图标", isOn: $state.settings.menuBar.showIcon)
-                Toggle("显示当前项目名", isOn: $state.settings.menuBar.showCurrentProjectName)
-                Toggle("显示当前分支名", isOn: $state.settings.menuBar.showCurrentBranchName)
-                Toggle("显示当前 Worktree 名称", isOn: $state.settings.menuBar.showCurrentWorktreeName)
-                Toggle("显示最近打开项目", isOn: $state.settings.menuBar.showRecentProjects)
-                Toggle("显示收藏项目", isOn: $state.settings.menuBar.showFavoriteProjects)
-                Toggle("显示项目行脚本入口", isOn: $state.settings.menuBar.showQuickScripts)
-                Toggle("显示扫描状态", isOn: $state.settings.menuBar.showScanStatus)
-                Divider()
-                Toggle("下拉菜单：收藏项目", isOn: $state.settings.menuBar.showFavoritesSection)
-                Toggle("下拉菜单：最近项目", isOn: $state.settings.menuBar.showRecentSection)
-                Toggle("下拉菜单：当前分组项目", isOn: $state.settings.menuBar.showCurrentGroupSection)
-                Toggle("下拉菜单项目行：显示脚本菜单", isOn: $state.settings.menuBar.showQuickScriptsSection)
-                Toggle("下拉菜单：刷新入口", isOn: $state.settings.menuBar.showRefreshSection)
-                Toggle("下拉菜单：控制面板入口", isOn: $state.settings.menuBar.showControlPanelSection)
-                Divider()
-                Picker("自动刷新间隔", selection: Binding(
-                    get: { state.settings.menuBar.autoRefreshInterval },
-                    set: { state.settings.menuBar.autoRefreshInterval = $0; state.restartAutoRefreshTimer() }
-                )) {
-                    Text("关闭").tag(TimeInterval(0))
-                    Text("1 分钟").tag(TimeInterval(60))
-                    Text("2 分钟").tag(TimeInterval(120))
-                    Text("5 分钟").tag(TimeInterval(300))
-                    Text("10 分钟").tag(TimeInterval(600))
-                }
             }
-            .frame(minWidth: 320, maxWidth: 420)
+            .frame(width: 330, alignment: .leading)
 
             MenuBarPreviewView(settings: state.settings.menuBar, project: state.selectedProject, projectCount: state.projects.count)
-                .frame(width: 300)
+                .frame(width: 320)
         }
-        .onChange(of: state.settings.menuBar) { _ in state.saveSettings() }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 96)
+    }
+
+    private func settingsGroup<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                content()
+            }
+        }
+    }
+
+    private func menuBarToggle(
+        _ keyPath: WritableKeyPath<MenuBarSettings, Bool>
+    ) -> Binding<Bool> {
+        Binding(
+            get: { state.settings.menuBar[keyPath: keyPath] },
+            set: { newValue in
+                state.updateMenuBarSettings { menuBar in
+                    menuBar[keyPath: keyPath] = newValue
+                }
+            }
+        )
     }
 
     private var scriptsTab: some View {
@@ -391,22 +424,22 @@ struct MenuBarPreviewView: View {
     let projectCount: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("预览")
                 .font(.headline)
 
             HStack(spacing: 8) {
                 if settings.showIcon {
                     Image(systemName: "hammer")
+                } else {
+                    Text("XcodeBar")
                 }
-                Text(menuTitle)
-                    .lineLimit(1)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.quaternary, in: Capsule())
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 previewHeader
                 if settings.showScanStatus {
                     Label("\(projectCount) 个项目", systemImage: "tray.full")
@@ -432,56 +465,63 @@ struct MenuBarPreviewView: View {
                     }
                 }
             }
-            .padding(14)
+            .padding(16)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
     private var previewHeader: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(project?.name ?? "XcodeBar")
-                .font(.headline)
-            Text([project?.gitBranch, project?.worktreeName].compactMap { $0 }.joined(separator: " / "))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            let parts = panelTitleParts
+            if !parts.isEmpty {
+                Text(parts.joined(separator: " / "))
+                    .font(.headline)
+            }
         }
     }
 
     private func previewSection(_ title: String, isVisible: Bool) -> some View {
         Group {
             if isVisible {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    HStack {
-                        Text(project?.name ?? "示例项目")
-                        Spacer()
-                        Text(project?.gitBranch ?? "-")
-                            .foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
+                    previewProjectInfo
                 }
             }
         }
     }
 
-    private var menuTitle: String {
-        switch settings.displayMode {
-        case .iconOnly:
-            return ""
-        case .iconAndProject:
-            return project?.name ?? "XcodeBar"
-        case .iconAndBranch:
-            return project?.gitBranch ?? "XcodeBar"
-        case .iconAndWorktree:
-            return project?.worktreeName ?? "XcodeBar"
-        case .custom:
-            var parts: [String] = []
-            if settings.showCurrentProjectName, let name = project?.name { parts.append(name) }
-            if settings.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
-            if settings.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
-            return parts.isEmpty ? "XcodeBar" : parts.joined(separator: " / ")
+    private var previewProjectInfo: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if settings.showCurrentProjectName {
+                Text(project?.name ?? "示例项目")
+                    .font(.caption.weight(.semibold))
+            }
+            if settings.showCurrentBranchName {
+                Label(project?.gitBranch ?? "-", systemImage: "arrow.triangle.branch")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if settings.showCurrentWorktreeName, let worktree = project?.worktreeName {
+                Label(worktree, systemImage: "point.3.connected.trianglepath.dotted")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if panelTitleParts.isEmpty {
+                Text("项目行")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
+    }
+
+    private var panelTitleParts: [String] {
+        var parts: [String] = []
+        if settings.showCurrentProjectName, let name = project?.name { parts.append(name) }
+        if settings.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
+        if settings.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
+        return parts
     }
 }

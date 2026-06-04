@@ -122,6 +122,7 @@ struct ProjectItem: Identifiable, Codable, Hashable {
     var packagePath: String?
     var podfilePath: String?
     var hasPods: Bool
+    var hasXcodeGen: Bool
     var schemes: [String] = []
     var gitBranch: String?
     var gitRootPath: String?
@@ -141,6 +142,7 @@ struct ProjectItem: Identifiable, Codable, Hashable {
         case packagePath
         case podfilePath
         case hasPods
+        case hasXcodeGen
         case schemes
         case gitBranch
         case gitRootPath
@@ -161,6 +163,7 @@ struct ProjectItem: Identifiable, Codable, Hashable {
         packagePath: String?,
         podfilePath: String?,
         hasPods: Bool,
+        hasXcodeGen: Bool = false,
         schemes: [String] = [],
         gitBranch: String?,
         gitRootPath: String?,
@@ -179,6 +182,7 @@ struct ProjectItem: Identifiable, Codable, Hashable {
         self.packagePath = packagePath
         self.podfilePath = podfilePath
         self.hasPods = hasPods
+        self.hasXcodeGen = hasXcodeGen
         self.schemes = schemes
         self.gitBranch = gitBranch
         self.gitRootPath = gitRootPath
@@ -200,6 +204,7 @@ struct ProjectItem: Identifiable, Codable, Hashable {
         packagePath = try container.decodeIfPresent(String.self, forKey: .packagePath)
         podfilePath = try container.decodeIfPresent(String.self, forKey: .podfilePath)
         hasPods = try container.decodeIfPresent(Bool.self, forKey: .hasPods) ?? false
+        hasXcodeGen = try container.decodeIfPresent(Bool.self, forKey: .hasXcodeGen) ?? false
         schemes = try container.decodeIfPresent([String].self, forKey: .schemes) ?? []
         gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
         gitRootPath = try container.decodeIfPresent(String.self, forKey: .gitRootPath)
@@ -236,7 +241,8 @@ struct ProjectItem: Identifiable, Codable, Hashable {
             groupName,
             worktreeName,
             primarySchemeName,
-            schemes.joined(separator: " ")
+            schemes.joined(separator: " "),
+            hasXcodeGen ? "xcodegen" : nil
         ]
         .compactMap { $0 }
         .joined(separator: " ")
@@ -318,7 +324,7 @@ struct MenuBarSettings: Codable, Hashable {
 
     var showIcon: Bool = true
     var showCurrentProjectName: Bool = true
-    var showCurrentBranchName: Bool = false
+    var showCurrentBranchName: Bool = true
     var showCurrentWorktreeName: Bool = false
     var showRecentProjects: Bool = true
     var showFavoriteProjects: Bool = true

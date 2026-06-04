@@ -8,9 +8,9 @@ struct XcodeBarApp: App {
         MenuBarExtra {
             MenuBarContentView()
                 .environmentObject(state)
-                .frame(width: 380)
+                .frame(width: 460)
         } label: {
-            MenuBarLabelView(title: state.menuTitle, showIcon: state.settings.menuBar.showIcon, isScanning: state.isScanning)
+            MenuBarLabelView(title: "", showIcon: state.settings.menuBar.showIcon, isScanning: state.isScanning)
         }
         .menuBarExtraStyle(.window)
 
