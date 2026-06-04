@@ -1,0 +1,53 @@
+name: XcodeBar
+options:
+  bundleIdPrefix: com.yunlongzhu
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      GCC_OPTIMIZATION_LEVEL: 0
+      ONLY_ACTIVE_ARCH: YES
+      DEBUG_INFORMATION_FORMAT: dwarf
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      GCC_PREPROCESSOR_DEFINITIONS:
+        - "DEBUG=1"
+        - "$(inherited)"
+    Release:
+      SWIFT_COMPILATION_MODE: wholemodule
+      DEBUG_INFORMATION_FORMAT: "dwarf-with-dsym"
+      ENABLE_NS_ASSERTIONS: NO
+
+targets:
+  XcodeBar:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/XcodeBar
+      - path: XcodeBar/Assets.xcassets
+        type: folder.assetcatalog
+    settings:
+      base:
+        PRODUCT_NAME: "MenuBar for Xcode"
+        PRODUCT_BUNDLE_IDENTIFIER: com.yunlongzhu.menubarforxcode
+        INFOPLIST_FILE: XcodeBar/Info.plist
+        CODE_SIGN_ENTITLEMENTS: XcodeBar/XcodeBar.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: B3V9XHCD33
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.developer-tools"
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
