@@ -3,9 +3,20 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var state: AppState
-    @State private var isImportingFolder = false
+    @State private var folderImportMode: FolderImportMode?
     @State private var selectedScriptID: UUID?
     @State private var editingScanFolderIDs: Set<UUID> = []
+
+    private var isImportingFolder: Binding<Bool> {
+        Binding(
+            get: { folderImportMode != nil },
+            set: { isPresented in
+                if !isPresented {
+                    folderImportMode = nil
+                }
+            }
+        )
+    }
 
     var body: some View {
         TabView {
@@ -19,9 +30,18 @@ struct SettingsView: View {
                 .tabItem { Label("日志", systemImage: "list.bullet.rectangle") }
         }
         .padding()
-        .fileImporter(isPresented: $isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+        .fileImporter(isPresented: isImportingFolder, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
+            let mode = folderImportMode
+            folderImportMode = nil
             if case .success(let urls) = result, let url = urls.first {
-                state.addScanFolder(path: url.path)
+                switch mode {
+                case .add:
+                    state.addScanFolder(url: url)
+                case .authorize(let folderID):
+                    state.authorizeScanFolder(id: folderID, url: url)
+                case nil:
+                    break
+                }
                 state.refreshAll()
             }
         }
@@ -31,7 +51,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Button {
-                    isImportingFolder = true
+                    folderImportMode = .add
                 } label: {
                     Label("添加", systemImage: "folder.badge.plus")
                 }
@@ -67,6 +87,12 @@ struct SettingsView: View {
                                 Image(systemName: "arrow.clockwise")
                             }
                             .help("刷新")
+                            Button {
+                                folderImportMode = .authorize(folder.id)
+                            } label: {
+                                Image(systemName: folder.securityScopedBookmarkData == nil ? "lock.open" : "lock")
+                            }
+                            .help("重新授权扫描文件夹")
                             Button(role: .destructive) {
                                 state.removeScanFolder(folder)
                             } label: {
@@ -299,6 +325,11 @@ struct SettingsView: View {
             return .red
         }
     }
+}
+
+private enum FolderImportMode: Equatable {
+    case add
+    case authorize(ScanFolder.ID)
 }
 
 struct ScriptEditorView: View {

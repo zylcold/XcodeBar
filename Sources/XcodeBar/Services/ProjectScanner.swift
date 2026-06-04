@@ -5,7 +5,13 @@ struct ProjectScanner {
 
     func scan(folder: ScanFolder, log: (ScanLogEntry.Level, String) -> Void) -> [ProjectItem] {
         guard folder.isEnabled else { return [] }
-        let rootURL = URL(fileURLWithPath: folder.path).standardizedFileURL
+        let access = securityScopedAccess(for: folder, log: log)
+        defer {
+            if access.didStartAccessing {
+                access.url.stopAccessingSecurityScopedResource()
+            }
+        }
+        let rootURL = access.url.standardizedFileURL
         guard FileManager.default.fileExists(atPath: rootURL.path) else {
             log(.error, "扫描文件夹不存在：\(folder.path)")
             return []
@@ -42,6 +48,37 @@ struct ProjectScanner {
         }
         log(.info, "扫描完成：\(folder.displayName)，发现 \(projects.count) 个项目")
         return projects
+    }
+
+    private func securityScopedAccess(
+        for folder: ScanFolder,
+        log: (ScanLogEntry.Level, String) -> Void
+    ) -> (url: URL, didStartAccessing: Bool) {
+        guard let bookmarkData = folder.securityScopedBookmarkData else {
+            log(.warning, "扫描目录未保存授权，App Store 版本可能无法访问：\(folder.displayName)。请在设置中重新授权。")
+            return (URL(fileURLWithPath: folder.path), false)
+        }
+
+        do {
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+            if isStale {
+                log(.warning, "扫描目录授权已过期：\(folder.displayName)。请在设置中重新授权。")
+            }
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            if !didStartAccessing {
+                log(.warning, "无法开启扫描目录授权：\(folder.displayName)。请在设置中重新授权。")
+            }
+            return (url, didStartAccessing)
+        } catch {
+            log(.error, "读取扫描目录授权失败：\(folder.displayName) \(error.localizedDescription)")
+            return (URL(fileURLWithPath: folder.path), false)
+        }
     }
 
     private func scanDirectory(

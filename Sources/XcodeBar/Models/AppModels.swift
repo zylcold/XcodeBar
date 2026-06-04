@@ -5,6 +5,7 @@ struct ScanFolder: Identifiable, Codable, Hashable {
     var displayName: String
     var path: String
     var groupName: String
+    var securityScopedBookmarkData: Data?
     var projectRegex: String = ""
     var isEnabled: Bool = true
     var recursiveScan: Bool = true
@@ -18,6 +19,7 @@ struct ScanFolder: Identifiable, Codable, Hashable {
         case displayName
         case path
         case groupName
+        case securityScopedBookmarkData
         case projectRegex
         case isEnabled
         case recursiveScan
@@ -32,6 +34,7 @@ struct ScanFolder: Identifiable, Codable, Hashable {
         displayName: String,
         path: String,
         groupName: String,
+        securityScopedBookmarkData: Data? = nil,
         projectRegex: String = "",
         isEnabled: Bool = true,
         recursiveScan: Bool = true,
@@ -44,6 +47,7 @@ struct ScanFolder: Identifiable, Codable, Hashable {
         self.displayName = displayName
         self.path = path
         self.groupName = groupName
+        self.securityScopedBookmarkData = securityScopedBookmarkData
         self.projectRegex = projectRegex
         self.isEnabled = isEnabled
         self.recursiveScan = recursiveScan
@@ -59,6 +63,7 @@ struct ScanFolder: Identifiable, Codable, Hashable {
         displayName = try container.decode(String.self, forKey: .displayName)
         path = try container.decode(String.self, forKey: .path)
         groupName = try container.decodeIfPresent(String.self, forKey: .groupName) ?? displayName
+        securityScopedBookmarkData = try container.decodeIfPresent(Data.self, forKey: .securityScopedBookmarkData)
         projectRegex = try container.decodeIfPresent(String.self, forKey: .projectRegex) ?? ""
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         recursiveScan = try container.decodeIfPresent(Bool.self, forKey: .recursiveScan) ?? true

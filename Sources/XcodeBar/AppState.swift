@@ -137,6 +137,31 @@ final class AppState: ObservableObject {
         saveSettings()
     }
 
+    func addScanFolder(url: URL) {
+        let standardizedURL = url.standardizedFileURL
+        let name = standardizedURL.lastPathComponent
+        settings.scanFolders.append(
+            ScanFolder(
+                displayName: name.isEmpty ? "Projects" : name,
+                path: standardizedURL.path,
+                groupName: name,
+                securityScopedBookmarkData: makeSecurityScopedBookmarkData(for: standardizedURL)
+            )
+        )
+        selectedMenuScanFolderID = selectedMenuScanFolderID ?? settings.scanFolders.first(where: \.isEnabled)?.id
+        saveSettings()
+    }
+
+    func authorizeScanFolder(id: ScanFolder.ID, url: URL) {
+        guard let index = settings.scanFolders.firstIndex(where: { $0.id == id }) else { return }
+        let standardizedURL = url.standardizedFileURL
+        guard let bookmarkData = makeSecurityScopedBookmarkData(for: standardizedURL) else { return }
+        settings.scanFolders[index].path = standardizedURL.path
+        settings.scanFolders[index].securityScopedBookmarkData = bookmarkData
+        logs.append(ScanLogEntry(level: .info, message: "已更新目录授权：\(settings.scanFolders[index].displayName)"))
+        saveSettings()
+    }
+
     func removeScanFolder(_ folder: ScanFolder) {
         settings.scanFolders.removeAll { $0.id == folder.id }
         projects.removeAll { $0.scanFolderID == folder.id }
@@ -168,6 +193,27 @@ final class AppState: ObservableObject {
                 self?.refreshAll()
             }
         }
+    }
+
+    private func makeSecurityScopedBookmarkData(for url: URL) -> Data? {
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            return try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+        } catch {
+            logs.append(ScanLogEntry(level: .error, message: "保存目录授权失败：\(url.path) \(error.localizedDescription)"))
+            return nil
+        }
+    }
+
+    private func scanFolder(for project: ProjectItem?) -> ScanFolder? {
+        guard let project else { return nil }
+        return settings.scanFolders.first { $0.id == project.scanFolderID }
     }
 
     func refreshAll() {
@@ -247,12 +293,21 @@ final class AppState: ObservableObject {
     }
 
     func open(project: ProjectItem, target: OpenTarget? = nil) {
+        let access = SecurityScopedAccess.start(for: scanFolder(for: project))
+        defer {
+            access?.stop()
+        }
         ProjectOpener.open(project: project, target: target ?? settings.defaultOpenTarget)
         markOpened(project)
     }
 
     func run(script: ScriptAction, project: ProjectItem?) {
+        let folder = scanFolder(for: project)
         Task.detached { [scriptRunner] in
+            let access = SecurityScopedAccess.start(for: folder)
+            defer {
+                access?.stop()
+            }
             _ = scriptRunner.run(script: script, project: project)
         }
     }

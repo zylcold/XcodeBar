@@ -2,6 +2,7 @@
 .swiftpm/
 dist/
 DerivedData/
+build_agent_*/
 *.xcuserstate
 *.xcuserdata/
 .DS_Store
