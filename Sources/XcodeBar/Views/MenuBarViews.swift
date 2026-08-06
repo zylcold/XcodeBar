@@ -2,18 +2,10 @@ import AppKit
 import SwiftUI
 
 struct MenuBarLabelView: View {
-    let title: String
-    let showIcon: Bool
     let isScanning: Bool
 
     var body: some View {
-        if showIcon && !title.isEmpty {
-            Label(title, systemImage: isScanning ? "arrow.triangle.2.circlepath" : "hammer")
-        } else if showIcon {
-            Image(systemName: isScanning ? "arrow.triangle.2.circlepath" : "hammer")
-        } else {
-            Text(title.isEmpty ? "XcodeBar" : title)
-        }
+        Image(systemName: isScanning ? "arrow.triangle.2.circlepath" : "hammer")
     }
 }
 
@@ -128,32 +120,15 @@ struct MenuBarContentView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if state.isScanning {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .foregroundStyle(.secondary)
-                }
-                Text(selectedFolderName)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                if state.settings.menuBar.showCurrentBranchName,
-                   let selectedProject = state.selectedProject,
-                   let branch = selectedProject.gitBranch {
-                    Label(branch, systemImage: "arrow.triangle.branch")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .help(branch)
-                }
-            }
-            if !currentProjectTitle.isEmpty {
-                Text(currentProjectTitle)
-                    .font(.subheadline)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if state.isScanning {
+                Image(systemName: "arrow.triangle.2.circlepath")
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
             }
+            Text(selectedFolderName)
+                .font(.headline)
+                .lineLimit(1)
+            Spacer()
             if let lastRefresh = state.lastRefreshAt {
                 Text("上次刷新：\(lastRefresh, style: .relative)前")
                     .font(.caption2)
@@ -164,10 +139,6 @@ struct MenuBarContentView: View {
 
     private var selectedFolderName: String {
         state.selectedMenuScanFolder?.displayName ?? "Overview"
-    }
-
-    private var currentProjectTitle: String {
-        state.panelTitleParts(for: state.selectedProject).joined(separator: " / ")
     }
 
     private var folderSwitcher: some View {
@@ -294,20 +265,22 @@ struct MenuBarContentView: View {
                             .font(.body.weight(.semibold))
                             .lineLimit(1)
                     }
-                    HStack(spacing: 10) {
-                        if state.settings.menuBar.showCurrentBranchName {
-                            Label(project.gitBranch ?? "-", systemImage: "arrow.triangle.branch")
-                                .lineLimit(1)
-                                .help(project.gitBranch ?? "无分支信息")
+                    if state.settings.menuBar.showCurrentBranchName,
+                       let branch = project.branchOrWorktreeName {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .foregroundStyle(.secondary)
+                            MarqueeText(text: branch, width: 100)
                         }
-                        if state.settings.menuBar.showCurrentWorktreeName, let worktree = project.worktreeName {
-                            Label(worktree, systemImage: "point.3.connected.trianglepath.dotted")
-                                .lineLimit(1)
-                                .help(worktree)
-                        }
+                        .font(.caption)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    if state.settings.menuBar.showCurrentWorktreeName, let worktree = project.effectiveWorktreeName {
+                        Label(worktree, systemImage: "point.3.connected.trianglepath.dotted")
+                            .lineLimit(1)
+                            .help(worktree)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if !state.settings.menuBar.showCurrentProjectName,
                        !state.settings.menuBar.showCurrentBranchName,
                        !state.settings.menuBar.showCurrentWorktreeName {
@@ -321,22 +294,113 @@ struct MenuBarContentView: View {
             }
             .buttonStyle(.plain)
 
-            if state.settings.menuBar.showQuickScriptsSection {
-                Menu {
-                    ForEach(state.scripts(for: project)) { script in
-                        Button(script.name) {
-                            state.requestRun(script: script, project: project)
+            ForEach(state.quickMenuScripts(for: project)) { script in
+                Button {
+                    state.requestRun(script: script, project: project)
+                } label: {
+                    Group {
+                        if script.emojiIcon.isEmpty {
+                            Image(systemName: "terminal")
+                        } else {
+                            Text(script.emojiIcon)
                         }
                     }
-                } label: {
-                    Image(systemName: "terminal")
-                        .frame(width: 24, height: 24)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 26, height: 26)
+                    .background(
+                        Circle().fill(Color.primary.opacity(0.08))
+                    )
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("脚本")
+                .buttonStyle(.plain)
+                .help("\(script.name)（\(script.command)）")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(0.06))
+        )
+    }
+}
+
+/// 固定宽度的文本，内容超出时自动跑马灯滚动；未超出时居左静态展示。
+struct MarqueeText: View {
+    let text: String
+    let width: CGFloat
+    var font: Font = .caption
+    var color: Color = .secondary
+
+    @State private var contentWidth: CGFloat = 0
+    @State private var phase: CGFloat = 0
+    @State private var isAnimating = false
+
+    /// 滚动速度（pt/秒）
+    private static var speed: Double { 28 }
+    /// 文本与下一轮副本之间的间距
+    private static var gap: CGFloat { 28 }
+
+    private var needsMarquee: Bool {
+        contentWidth > width
+    }
+
+    private var scrollDistance: CGFloat {
+        contentWidth + Self.gap
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if needsMarquee {
+                HStack(spacing: Self.gap) {
+                    Text(text)
+                    Text(text)
+                }
+                .font(font)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .fixedSize()
+                .offset(x: phase)
+            } else {
+                Text(text)
+                    .font(font)
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .frame(width: width, alignment: .leading)
+            }
+        }
+        .frame(width: width, alignment: .leading)
+        .clipped()
+        .background(
+            Text(text)
+                .font(font)
+                .lineLimit(1)
+                .fixedSize()
+                .hidden()
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: MarqueeWidthKey.self, value: proxy.size.width)
+                })
+        )
+        .onPreferenceChange(MarqueeWidthKey.self) { value in
+            contentWidth = value
+            guard value > width, !isAnimating else { return }
+            isAnimating = true
+            phase = 0
+            let duration = max(Double(scrollDistance) / Self.speed, 1.0)
+            DispatchQueue.main.async {
+                withAnimation(.linear(duration: duration)
+                    .repeatForever(autoreverses: false)) {
+                    phase = -scrollDistance
+                }
+            }
+        }
+        .id(text)
+    }
+}
+
+private struct MarqueeWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

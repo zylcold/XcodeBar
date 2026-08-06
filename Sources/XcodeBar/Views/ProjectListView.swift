@@ -204,7 +204,7 @@ struct ProjectRowView: View {
                             .background(.purple.opacity(0.16), in: Capsule())
                     }
                     if project.isWorktree {
-                        Text(project.worktreeName ?? "Worktree")
+                        Text(project.effectiveWorktreeName ?? "Worktree")
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -212,7 +212,7 @@ struct ProjectRowView: View {
                     }
                 }
                 HStack(spacing: 12) {
-                    Label(project.gitBranch ?? "-", systemImage: "arrow.triangle.branch")
+                    Label(project.branchOrWorktreeName ?? "-", systemImage: "arrow.triangle.branch")
                     Label(project.primarySchemeName ?? "-", systemImage: "shippingbox")
                     Label(project.groupName, systemImage: "folder")
                     Text(project.rootPath)

@@ -108,6 +108,57 @@ struct ScriptAction: Identifiable, Codable, Hashable {
     var scope: ScriptScope
     var requiresConfirmation: Bool = true
     var showsExecutionWindow: Bool = true
+    /// 是否在下拉面板项目行显示为快捷图标
+    var showInMenuBar: Bool = false
+    /// 快捷图标 emoji；为空时回退到默认 terminal SF Symbol
+    var emojiIcon: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case command
+        case workingDirectory
+        case scope
+        case requiresConfirmation
+        case showsExecutionWindow
+        case showInMenuBar
+        case emojiIcon
+    }
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        command: String,
+        workingDirectory: String?,
+        scope: ScriptScope,
+        requiresConfirmation: Bool = true,
+        showsExecutionWindow: Bool = true,
+        showInMenuBar: Bool = false,
+        emojiIcon: String = ""
+    ) {
+        self.id = id
+        self.name = name
+        self.command = command
+        self.workingDirectory = workingDirectory
+        self.scope = scope
+        self.requiresConfirmation = requiresConfirmation
+        self.showsExecutionWindow = showsExecutionWindow
+        self.showInMenuBar = showInMenuBar
+        self.emojiIcon = emojiIcon
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decode(String.self, forKey: .name)
+        command = try container.decode(String.self, forKey: .command)
+        workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
+        scope = try container.decode(ScriptScope.self, forKey: .scope)
+        requiresConfirmation = try container.decodeIfPresent(Bool.self, forKey: .requiresConfirmation) ?? true
+        showsExecutionWindow = try container.decodeIfPresent(Bool.self, forKey: .showsExecutionWindow) ?? true
+        showInMenuBar = try container.decodeIfPresent(Bool.self, forKey: .showInMenuBar) ?? false
+        emojiIcon = try container.decodeIfPresent(String.self, forKey: .emojiIcon) ?? ""
+    }
 }
 
 struct ProjectItem: Identifiable, Codable, Hashable {
@@ -231,6 +282,29 @@ struct ProjectItem: Identifiable, Codable, Hashable {
 
     var primarySchemeName: String? {
         schemes.first
+    }
+
+    /// 优先使用 Git 分支名；沙盒/无 Git 信息时回退到 worktree 名；
+    /// 再回退到从 rootPath 推断的 `.worktree(s)/xxx` 目录名。
+    var branchOrWorktreeName: String? {
+        if let gitBranch, !gitBranch.isEmpty { return gitBranch }
+        return effectiveWorktreeName
+    }
+
+    /// 实际可用的 worktree 名：已识别的 worktreeName 优先，
+    /// 否则从 rootPath 推断 `.worktree` / `.worktrees` 目录下的子目录名。
+    var effectiveWorktreeName: String? {
+        if let worktreeName, !worktreeName.isEmpty { return worktreeName }
+        let components = rootPath.split(separator: "/").map(String.init)
+        for (index, component) in components.enumerated() {
+            let lower = component.lowercased()
+            if (lower == ".worktree" || lower == ".worktrees"),
+               index + 1 < components.count,
+               !components[index + 1].isEmpty {
+                return components[index + 1]
+            }
+        }
+        return nil
     }
 
     var searchIndex: String {

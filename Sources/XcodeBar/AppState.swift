@@ -75,8 +75,8 @@ final class AppState: ObservableObject {
     func panelTitleParts(for project: ProjectItem?) -> [String] {
         var parts: [String] = []
         if settings.menuBar.showCurrentProjectName, let name = project?.name { parts.append(name) }
-        if settings.menuBar.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
-        if settings.menuBar.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
+        if settings.menuBar.showCurrentBranchName, let branch = project?.branchOrWorktreeName { parts.append(branch) }
+        if settings.menuBar.showCurrentWorktreeName, let worktree = project?.effectiveWorktreeName { parts.append(worktree) }
         return parts
     }
 
@@ -325,6 +325,11 @@ final class AppState: ObservableObject {
                 return project?.isWorktree == true
             }
         }
+    }
+
+    /// 下拉面板项目行快捷脚本：同时满足 scope 匹配 + showInMenuBar。
+    func quickMenuScripts(for project: ProjectItem?) -> [ScriptAction] {
+        scripts(for: project).filter { $0.showInMenuBar }
     }
 
     func requestRun(script: ScriptAction, project: ProjectItem?) {

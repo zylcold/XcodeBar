@@ -135,10 +135,6 @@ struct SettingsView: View {
     private var menuBarTab: some View {
         HStack(alignment: .top, spacing: 64) {
             VStack(alignment: .leading, spacing: 18) {
-                settingsGroup("菜单栏") {
-                    Toggle("显示 App 图标", isOn: menuBarToggle(\.showIcon))
-                }
-
                 settingsGroup("面板显示") {
                     Toggle("显示项目名", isOn: menuBarToggle(\.showCurrentProjectName))
                     Toggle("显示分支名", isOn: menuBarToggle(\.showCurrentBranchName))
@@ -150,7 +146,6 @@ struct SettingsView: View {
                     Toggle("显示收藏项目", isOn: menuBarToggle(\.showFavoritesSection))
                     Toggle("显示最近项目", isOn: menuBarToggle(\.showRecentSection))
                     Toggle("显示当前分组项目", isOn: menuBarToggle(\.showCurrentGroupSection))
-                    Toggle("项目行显示脚本菜单", isOn: menuBarToggle(\.showQuickScriptsSection))
                     Toggle("显示刷新入口", isOn: menuBarToggle(\.showRefreshSection))
                     Toggle("显示控制面板入口", isOn: menuBarToggle(\.showControlPanelSection))
                 }
@@ -368,6 +363,7 @@ private enum FolderImportMode: Equatable {
 struct ScriptEditorView: View {
     @Binding var script: ScriptAction
     let onDelete: () -> Void
+    @State private var showEmojiPicker = false
 
     var body: some View {
         Form {
@@ -388,6 +384,43 @@ struct ScriptEditorView: View {
 
             Section("执行行为") {
                 Toggle("执行前需要确认", isOn: $script.requiresConfirmation)
+            }
+
+            Section("菜单栏快捷方式") {
+                Toggle("在下拉面板项目行显示", isOn: $script.showInMenuBar)
+                HStack {
+                    Text("图标")
+                    Spacer()
+                    Button {
+                        showEmojiPicker.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if script.emojiIcon.isEmpty {
+                                Image(systemName: "terminal")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(script.emojiIcon)
+                            }
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .popover(isPresented: $showEmojiPicker, arrowEdge: .top) {
+                        EmojiPickerView(selection: $script.emojiIcon)
+                    }
+                    if !script.emojiIcon.isEmpty {
+                        Button {
+                            script.emojiIcon = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("清除，使用默认图标")
+                    }
+                }
             }
 
             Section {
@@ -429,11 +462,7 @@ struct MenuBarPreviewView: View {
                 .font(.headline)
 
             HStack(spacing: 8) {
-                if settings.showIcon {
-                    Image(systemName: "hammer")
-                } else {
-                    Text("XcodeBar")
-                }
+                Image(systemName: "hammer")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -449,10 +478,6 @@ struct MenuBarPreviewView: View {
                 previewSection("收藏项目", isVisible: settings.showFavoritesSection)
                 previewSection("最近项目", isVisible: settings.showRecentSection)
                 previewSection("当前分组", isVisible: settings.showCurrentGroupSection)
-                if settings.showQuickScriptsSection {
-                    Label("项目行脚本菜单", systemImage: "terminal")
-                        .font(.caption)
-                }
                 Divider()
                 HStack {
                     if settings.showRefreshSection {
@@ -500,11 +525,11 @@ struct MenuBarPreviewView: View {
                     .font(.caption.weight(.semibold))
             }
             if settings.showCurrentBranchName {
-                Label(project?.gitBranch ?? "-", systemImage: "arrow.triangle.branch")
+                Label(project?.branchOrWorktreeName ?? "-", systemImage: "arrow.triangle.branch")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            if settings.showCurrentWorktreeName, let worktree = project?.worktreeName {
+            if settings.showCurrentWorktreeName, let worktree = project?.effectiveWorktreeName {
                 Label(worktree, systemImage: "point.3.connected.trianglepath.dotted")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -520,8 +545,59 @@ struct MenuBarPreviewView: View {
     private var panelTitleParts: [String] {
         var parts: [String] = []
         if settings.showCurrentProjectName, let name = project?.name { parts.append(name) }
-        if settings.showCurrentBranchName, let branch = project?.gitBranch { parts.append(branch) }
-        if settings.showCurrentWorktreeName, let worktree = project?.worktreeName { parts.append(worktree) }
+        if settings.showCurrentBranchName, let branch = project?.branchOrWorktreeName { parts.append(branch) }
+        if settings.showCurrentWorktreeName, let worktree = project?.effectiveWorktreeName { parts.append(worktree) }
         return parts
+    }
+}
+
+/// 常用 emoji 选择面板，用于脚本快捷图标。
+struct EmojiPickerView: View {
+    @Binding var selection: String
+
+    /// 开发/脚本场景常用 emoji
+    private let emojis: [String] = [
+        "📥", "⬆️", "🧹", "🔨", "🚀", "📦", "🔄", "🌿",
+        "📋", "🗑️", "⚡", "🏷️", "🔀", "📝", "▶️", "⏹️",
+        "🔧", "🎯", "🖥️", "📁", "🔍", "✅", "❌", "⚠️",
+        "🛠️", "⚙️", "🐞", "🐛", "🎨", "📚", "💡", "🔥"
+    ]
+
+    private let columns = Array(repeating: GridItem(.fixed(32), spacing: 6), count: 8)
+
+    var body: some View {
+        VStack(spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 6) {
+                Button {
+                    selection = ""
+                } label: {
+                    Image(systemName: "terminal")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle().fill(selection.isEmpty ? Color.accentColor.opacity(0.2) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("默认图标")
+
+                ForEach(emojis, id: \.self) { emoji in
+                    Button {
+                        selection = emoji
+                    } label: {
+                        Text(emoji)
+                            .font(.title3)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle().fill(selection == emoji ? Color.accentColor.opacity(0.2) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 312)
     }
 }
