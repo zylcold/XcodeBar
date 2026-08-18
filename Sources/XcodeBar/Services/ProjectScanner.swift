@@ -29,8 +29,15 @@ struct ProjectScanner {
             log(.info, "正则预过滤：\(folder.displayName)，候选 \(allCandidates.count) 个，保留 \(matchedCandidates.count) 个")
         }
 
+        var repositoryCache: [String: GitRepository?] = [:]
+        var schemeCache: [String: [String]] = [:]
         let scannedProjects = matchedCandidates.map { candidate in
-            makeProject(from: candidate, folder: folder)
+            makeProject(
+                from: candidate,
+                folder: folder,
+                repositoryCache: &repositoryCache,
+                schemeCache: &schemeCache
+            )
         }
         log(.info, "候选项目：\(folder.displayName)，\(scannedProjects.count) 个")
 
@@ -159,9 +166,14 @@ struct ProjectScanner {
         }
     }
 
-    private func makeProject(from candidate: ProjectCandidate, folder: ScanFolder) -> ProjectItem {
+    private func makeProject(
+        from candidate: ProjectCandidate,
+        folder: ScanFolder,
+        repositoryCache: inout [String: GitRepository?],
+        schemeCache: inout [String: [String]]
+    ) -> ProjectItem {
         let rootPath = candidate.rootPath
-        let gitInfo = gitMetadata(at: rootPath, detectWorktree: true)
+        let gitInfo = gitMetadata(at: rootPath, detectWorktree: true, repositoryCache: &repositoryCache)
         let type: ProjectType
         if candidate.workspacePath != nil {
             type = .workspace
@@ -185,7 +197,7 @@ struct ProjectScanner {
             podfilePath: candidate.podfilePath,
             hasPods: candidate.podfilePath != nil,
             hasXcodeGen: candidate.xcodegenPath != nil,
-            schemes: schemeNames(for: candidate),
+            schemes: schemeNames(for: candidate, cache: &schemeCache),
             gitBranch: gitInfo.branch,
             gitRootPath: gitInfo.root,
             isWorktree: gitInfo.isWorktree,
@@ -239,11 +251,17 @@ struct ProjectScanner {
         return workspacePath.split(separator: "/").contains { $0.hasSuffix(".xcodeproj") }
     }
 
-    private func schemeNames(for candidate: ProjectCandidate) -> [String] {
+    private func schemeNames(for candidate: ProjectCandidate, cache: inout [String: [String]]) -> [String] {
         let containers = [candidate.workspacePath, candidate.xcodeprojPath].compactMap { $0 }
         var names: [String] = []
         for container in containers {
-            names.append(contentsOf: schemeNames(in: URL(fileURLWithPath: container)))
+            if let cached = cache[container] {
+                names.append(contentsOf: cached)
+                continue
+            }
+            let found = schemeNames(in: URL(fileURLWithPath: container))
+            cache[container] = found
+            names.append(contentsOf: found)
         }
         return Array(Set(names)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
@@ -256,9 +274,13 @@ struct ProjectScanner {
         if let urls = try? FileManager.default.contentsOfDirectory(at: sharedSchemes, includingPropertiesForKeys: nil) {
             schemeURLs.append(contentsOf: urls)
         }
-        if let enumerator = FileManager.default.enumerator(at: userData, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-            for case let url as URL in enumerator where url.pathExtension == "xcscheme" {
-                schemeURLs.append(url)
+        if let enumerator = FileManager.default.enumerator(at: userData, includingPropertiesForKeys: [.isDirectoryKey, .nameKey], options: [.skipsHiddenFiles]) {
+            for case let url as URL in enumerator {
+                if url.pathExtension == "xcscheme" {
+                    schemeURLs.append(url)
+                } else if url.pathExtension != "xcuserdatad" {
+                    enumerator.skipDescendants()
+                }
             }
         }
 
@@ -268,8 +290,12 @@ struct ProjectScanner {
             .filter { !$0.isEmpty }
     }
 
-    private func gitMetadata(at path: String, detectWorktree: Bool) -> (branch: String?, root: String?, isWorktree: Bool, worktreeName: String?, mainPath: String?) {
-        guard let repository = gitRepository(containing: URL(fileURLWithPath: path).standardizedFileURL) else {
+    private func gitMetadata(
+        at path: String,
+        detectWorktree: Bool,
+        repositoryCache: inout [String: GitRepository?]
+    ) -> (branch: String?, root: String?, isWorktree: Bool, worktreeName: String?, mainPath: String?) {
+        guard let repository = gitRepository(containing: URL(fileURLWithPath: path).standardizedFileURL, cache: &repositoryCache) else {
             return (nil, nil, false, nil, nil)
         }
         let branch = gitBranchName(gitDirectory: repository.gitDirectory)
@@ -279,20 +305,31 @@ struct ProjectScanner {
         return (branch, repository.root.path, isWorktree, worktreeName, mainPath)
     }
 
-    private func gitRepository(containing url: URL) -> GitRepository? {
-        var current = url
+    private func gitRepository(
+        containing url: URL,
+        cache: inout [String: GitRepository?]
+    ) -> GitRepository? {
+        var current = url.standardizedFileURL
         let fileManager = FileManager.default
         while true {
+            if let cached = cache[current.path] {
+                return cached
+            }
             let dotGit = current.appendingPathComponent(".git")
             var isDirectory: ObjCBool = false
             if fileManager.fileExists(atPath: dotGit.path, isDirectory: &isDirectory) {
+                let repository: GitRepository?
                 if isDirectory.boolValue {
-                    return GitRepository(root: current, gitDirectory: dotGit, isWorktree: false)
+                    repository = GitRepository(root: current, gitDirectory: dotGit, isWorktree: false)
+                } else if let gitDirectory = gitDirectory(fromFileAt: dotGit, repositoryRoot: current) {
+                    repository = GitRepository(root: current, gitDirectory: gitDirectory, isWorktree: true)
+                } else {
+                    repository = nil
                 }
-                if let gitDirectory = gitDirectory(fromFileAt: dotGit, repositoryRoot: current) {
-                    return GitRepository(root: current, gitDirectory: gitDirectory, isWorktree: true)
-                }
+                cache[current.path] = repository
+                return repository
             }
+            cache[current.path] = nil
 
             let parent = current.deletingLastPathComponent()
             if parent.path == current.path {

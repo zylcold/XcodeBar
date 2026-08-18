@@ -33,6 +33,12 @@ struct XcodeBarApp: App {
                 .background(WindowFocusView())
         }
 
+        Window("脚本结果", id: "scriptResult") {
+            if let result = state.lastScriptResult {
+                ScriptResultView(result: result)
+            }
+        }
+
         Settings {
             SettingsView()
                 .environmentObject(state)

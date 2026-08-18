@@ -17,6 +17,8 @@ final class AppState: ObservableObject {
     @Published var isScanning: Bool = false
     @Published var scanProgress: ScanProgress = ScanProgress()
     @Published var lastScriptResult: ScriptResult?
+    /// 自增计数：每次后台脚本完成并需要弹出结果窗口时递增，供视图触发 openWindow。
+    @Published var scriptResultOpenRequest: Int?
     @Published var pendingScriptRequest: PendingScriptRequest?
     @Published var lastRefreshAt: Date?
 
@@ -308,8 +310,17 @@ final class AppState: ObservableObject {
             defer {
                 access?.stop()
             }
-            _ = scriptRunner.run(script: script, project: project)
+            let result = scriptRunner.run(script: script, project: project)
+            await MainActor.run {
+                self.lastScriptResult = result
+                self.presentScriptResultIfNeeded(script)
+            }
         }
+    }
+
+    private func presentScriptResultIfNeeded(_ script: ScriptAction) {
+        guard script.showsExecutionWindow == false else { return }
+        scriptResultOpenRequest = (scriptResultOpenRequest ?? 0) + 1
     }
 
     func scripts(for project: ProjectItem?) -> [ScriptAction] {

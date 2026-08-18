@@ -278,8 +278,17 @@ struct ScriptResultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(result.scriptName)
-                .font(.title2)
+            HStack {
+                Text(result.scriptName)
+                    .font(.title2)
+                Spacer()
+                Button {
+                    NSApp.keyWindow?.close()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .help("关闭")
+            }
             Text("目录：\(result.workingDirectory)")
             Text("退出码：\(result.exitCode)  耗时：\(String(format: "%.2fs", result.duration))")
             Divider()

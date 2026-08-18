@@ -383,6 +383,12 @@ struct ScriptEditorView: View {
             }
 
             Section("执行行为") {
+                Toggle("在 Terminal 窗口运行", isOn: $script.showsExecutionWindow)
+                Text(script.showsExecutionWindow
+                    ? "打开 Terminal 交互式运行；结果窗口仅显示启动状态。"
+                    : "后台静默运行，结果窗口显示真实 stdout、stderr 和退出码。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("执行前需要确认", isOn: $script.requiresConfirmation)
             }
 

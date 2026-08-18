@@ -19,6 +19,10 @@ struct MenuBarContentView: View {
                 .task {
                     state.refreshMenuBarIfNeeded()
                 }
+                .onChange(of: state.scriptResultOpenRequest) { request in
+                    guard request != nil else { return }
+                    openScriptResultWindow()
+                }
 
             if state.enabledScanFolders.count > 1 {
                 folderSwitcher
@@ -82,6 +86,12 @@ struct MenuBarContentView: View {
         openWindow(id: id)
         scheduleFocus(title: title)
         observeWindowClose()
+    }
+
+    private func openScriptResultWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
+        openWindow(id: "scriptResult")
     }
 
     private func scheduleFocus(title: String) {
